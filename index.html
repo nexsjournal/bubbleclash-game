@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>BUBBLE CLASH · 泡泡突围</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='35%25' cy='30%25' r='75%25'%3E%3Cstop offset='0' stop-color='%23e6ffff'/%3E%3Cstop offset='.55' stop-color='%2337e7ff'/%3E%3Cstop offset='1' stop-color='%2309364f'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='28' fill='url(%23g)'/%3E%3Ccircle cx='23' cy='22' r='6' fill='%23ffffff' opacity='.9'/%3E%3C/svg%3E">
+<link rel="preload" href="assets/hdri/desert_sky_4k.hdr" as="fetch" crossorigin />
+<style>
+@font-face{font-family:'Rajdhani';src:url('assets/fonts/Rajdhani-500.woff2') format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:'Rajdhani';src:url('assets/fonts/Rajdhani-600.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Rajdhani';src:url('assets/fonts/Rajdhani-700.woff2') format('woff2');font-weight:700;font-display:swap}
+@font-face{font-family:'Chakra Petch';src:url('assets/fonts/ChakraPetch-500.woff2') format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:'Chakra Petch';src:url('assets/fonts/ChakraPetch-600.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Chakra Petch';src:url('assets/fonts/ChakraPetch-700.woff2') format('woff2');font-weight:700;font-display:swap}
+</style>
+<link rel="stylesheet" href="/src/styles/tactical.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="game-canvas"></canvas>
+
+  <div id="grade-overlay"></div>
+  <div id="scanlines"></div>
+  <div id="letterbox"><div class="lb-bar lb-top"></div><div class="lb-bar lb-bottom"></div></div>
+  <div id="bubble-wipe"><i></i></div>
+  <div id="damage-flash"></div>
+
+  <!-- ================= BUBBLE TRAP ================= -->
+  <div id="bubble-screen">
+    <div class="bubble-film"></div>
+    <div class="bubble-hud">
+      <div class="bh-tag">CONTAINED // 泡封状态</div>
+      <div class="bubble-timer-badge"><span id="rescue-timer">12.0</span><small>SEC</small></div>
+      <div class="bubble-copy">
+        <div class="bubble-tip">移动至友军身边 · 接触即可破泡脱困</div>
+        <div class="rescue-bar"><i id="rescue-bar-fill"></i></div>
+        <p id="bubble-status">按住 <kbd>空格</kbd> 加速移动</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= HUD ================= -->
+  <div id="hud" class="hidden">
+    <div class="hud-vignette"></div>
+    <div id="bubble-build" aria-hidden="true">
+      <span class="bb-film"></span>
+      <span class="bb-rim"></span>
+      <span class="bb-warn" id="bb-warn">CONTAINMENT · 泡封临界</span>
+      <span class="bb-drop d1"></span><span class="bb-drop d2"></span><span class="bb-drop d3"></span>
+      <span class="bb-drop d4"></span><span class="bb-drop d5"></span><span class="bb-drop d6"></span>
+    </div>
+    <div id="ads-overlay" aria-hidden="true">
+      <span class="ads-vignette"></span>
+      <span class="ads-ring"></span>
+      <span class="ads-mark m1"></span><span class="ads-mark m2"></span>
+      <span class="ads-mark m3"></span><span class="ads-mark m4"></span>
+      <span class="ads-label">M4A1 OPTIC · ADS</span>
+    </div>
+    <div class="hud-frame" aria-hidden="true">
+      <i class="hf-corner tl"></i><i class="hf-corner tr"></i>
+      <i class="hf-corner bl"></i><i class="hf-corner br"></i>
+      <div class="hf-rail left"><span>UPLINK · 0x2F</span></div>
+      <div class="hf-rail right"><span>SECTOR · BUBBLE CLASH</span></div>
+      <div class="hf-ticks top"></div>
+      <div class="hf-ticks bottom"></div>
+    </div>
+
+    <!-- minimal modern HUD (reference: Ghost Recon style) -->
+    <div id="hud-min">
+      <div class="hm-top">
+        <span class="hm-side blue">BLUE <b id="hm-blue">0</b></span>
+        <span class="hm-clock" id="hm-timer">05:00</span>
+        <span class="hm-side red"><b id="hm-red">0</b> RED</span>
+      </div>
+      <div class="hm-core hidden" id="hm-core">
+        <span class="hm-core-k">A-SITE CORE</span>
+        <i class="hm-core-track"><em id="hm-corefill"></em></i>
+        <b id="hm-corepct">100%</b>
+      </div>
+      <div class="hm-left">
+        <div class="hm-hp"><b id="hm-hp">100</b><span>HP</span></div>
+        <div class="hm-hpbar"><i id="hm-hpfill"></i></div>
+        <div class="hm-obj" id="hm-objective">守住 A 点 · 保护泡泡核心</div>
+      </div>
+      <div class="hm-right">
+        <div class="hm-weapon" id="hm-weapon">M4A1 · 5.56</div>
+        <div class="hm-ammo"><b id="hm-ammo">30</b><span>/<i id="hm-reserve">3</i></span></div>
+        <div class="hm-reload" id="hm-reload">R 换弹</div>
+      </div>
+      <div class="hm-hints">
+        <span><kbd>LMB</kbd>射击</span>
+        <span><kbd>RMB</kbd>瞄准</span>
+        <span><kbd>F</kbd>近战</span>
+        <span><kbd>R</kbd>换弹</span>
+      </div>
+    </div>
+
+    <div id="hud-top">
+      <!-- weapon -->
+      <div class="hud-corner left">
+        <div class="tac-card weapon-card">
+          <div class="card-tab"><span>PRIMARY</span><i></i><span class="tab-live">LINKED</span></div>
+          <div class="weapon-body">
+            <div class="weapon-icon">
+              <svg viewBox="0 0 120 54" aria-hidden="true">
+                <path d="M6 24h44l8-8h34l6 6v10l-6 6H84l-6 12H56l4-14H6z" fill="none" stroke="currentColor" stroke-width="2.4"/>
+                <path d="M86 20h20v8H86z" fill="currentColor" opacity=".22"/>
+                <circle cx="58" cy="30" r="7" fill="none" stroke="currentColor" stroke-width="2.4"/>
+                <path d="M58 23v14M51 30h14" stroke="currentColor" stroke-width="1.6"/>
+                <path d="M16 32h26" stroke="currentColor" stroke-width="1.6" opacity=".6"/>
+              </svg>
+            </div>
+            <div class="weapon-meta">
+              <div class="wp-name">M4A1 <b>«CARBINE»</b></div>
+              <div class="ammo-row"><b id="tank-value">30</b><small>发</small><span class="ammo-unit">MAG</span></div>
+              <div class="ammo-bar"><i id="tank-liquid"></i><span class="ammo-ticks"></span></div>
+              <div class="pressure-row">
+                <span class="pr-k">CALIBRE</span>
+                <i class="pr-track"><em id="pressure-fill"></em></i>
+                <b id="pressure-val">5.56</b><small>NATO</small>
+              </div>
+            </div>
+          </div>
+          <div class="weapon-foot">
+            <span id="tank-pump">R · 换弹 · 弹匣 ×3</span>
+            <span class="wp-status"><i class="dot"></i><span id="weapon-status">READY</span></span>
+          </div>
+          <span class="wp-serial">M4A1 · 5.56×45 MM · US ORDNANCE</span>
+        </div>
+      </div>
+
+      <!-- objective + score -->
+      <div class="hud-center">
+        <div id="compass">
+          <div class="cp-track" id="compass-track"></div>
+          <i class="cp-center"></i>
+          <i class="cp-obj" id="compass-obj"></i>
+        </div>
+        <div class="ops-strip">
+          <div class="ops-side blue">
+            <span class="ops-tag">BLUE CELL</span>
+            <b id="score-blue">0</b>
+          </div>
+          <div class="ops-mid">
+            <span class="ops-kicker">OPERATION · SITE A</span>
+            <span class="ops-timer" id="match-timer">05:00</span>
+          </div>
+          <div class="ops-side red">
+            <b id="score-red">0</b>
+            <span class="ops-tag">RED CELL</span>
+          </div>
+        </div>
+        <div class="wave-line"><span class="mc-round">WAVE 01 · 剩余 3</span></div>
+        <div id="objective">
+          <span class="obj-idx">OBJ</span>
+          <span class="obj-text" id="objective-text">守住 A 点 · 击退红队 · 保护泡泡核心</span>
+        </div>
+        <div id="boss-bar" class="hidden">
+          <div class="bb-head"><span class="bb-name">BUBBLE CORE</span><span class="bb-pct">100%</span></div>
+          <div class="bb-track"><i id="bb-fill"></i></div>
+        </div>
+      </div>
+
+      <!-- squad + killfeed -->
+      <div class="hud-corner right">
+        <div id="roster-card" class="tac-card">
+          <div class="card-tab"><span>SQUAD LINK</span><i></i><span class="tab-live">4 / 6</span></div>
+          <div class="roster-row">
+            <span class="sq-dot blue"></span>
+            <b id="sc-player-name">ECHO</b>
+            <em class="sq-tag blue">YOU</em>
+            <i class="rr-hp"><em id="rr-hp-player"></em></i>
+          </div>
+          <div class="roster-row">
+            <span class="sq-dot cyan"></span>
+            <b id="sc-ally-name">NOVA</b>
+            <em class="sq-tag cyan">AI</em>
+            <i class="rr-hp"><em id="rr-hp-ally"></em></i>
+          </div>
+          <div class="roster-row hostile">
+            <span class="sq-dot red"></span>
+            <b>RED CELL</b>
+            <em class="sq-tag red">HOSTILE</em>
+            <i class="rr-hp enemy"><em id="rr-hp-red"></em></i>
+          </div>
+        </div>
+        <div id="telemetry" class="tac-card">
+          <div class="card-tab"><span>TELEMETRY</span><i></i><span class="tab-live">SYNC</span></div>
+          <div class="tel-row"><span>UPLINK</span><i class="tel-track"><em style="width:98%"></em></i><b>98%</b></div>
+          <div class="tel-row"><span>PING</span><i class="tel-track alt"><em style="width:22%"></em></i><b>12<small>ms</small></b></div>
+          <div class="tel-row"><span>RENDER</span><i class="tel-track"><em id="tel-fps-bar" style="width:100%"></em></i><b id="tel-fps">60</b></div>
+        </div>
+        <div id="killfeed"></div>
+      </div>
+    </div>
+
+    <!-- legacy refs kept hidden for stable HUD updates -->
+    <div id="squad-panel" class="legacy-hidden">
+      <div class="squad-card" id="card-player">
+        <div class="sc-portrait" data-team="blue"><span>你</span></div>
+        <div class="sc-info">
+          <div class="sc-top"><b id="sc-player-name-legacy">ECHO</b><em class="state" id="sc-player-state">作战中</em></div>
+          <div class="sc-bars">
+            <div class="mini-bar wet"><i id="sc-player-wet"></i></div>
+            <div class="mini-bar hp"><i id="sc-player-hp"></i></div>
+          </div>
+          <div class="sc-foot"><span id="sc-player-score">0 分</span><span class="ping">12ms</span></div>
+        </div>
+      </div>
+      <div class="squad-card ally" id="card-ally">
+        <div class="sc-portrait" data-team="green"><span>队友</span></div>
+        <div class="sc-info">
+          <div class="sc-top"><b id="sc-ally-name-legacy">NOVA</b><em class="state" id="sc-ally-state">跟随中</em></div>
+          <div class="sc-bars">
+            <div class="mini-bar wet"><i id="sc-ally-wet"></i></div>
+            <div class="mini-bar hp"><i id="sc-ally-hp"></i></div>
+          </div>
+          <div class="sc-foot"><span id="sc-ally-score">0 分</span><span class="ammo" id="sc-ally-ammo">AUTO</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- minimap -->
+    <div id="minimap-wrap">
+      <div class="mm-frame">
+        <canvas id="minimap" width="360" height="360"></canvas>
+        <div class="mm-grid"></div>
+        <div class="mm-sweep"></div>
+        <div class="mm-head"><span>N</span></div>
+        <span class="mm-corner c1"></span><span class="mm-corner c2"></span>
+        <span class="mm-corner c3"></span><span class="mm-corner c4"></span>
+      </div>
+      <div class="mm-meta"><span class="mm-coord">BUBBLE CLASH // 34°N</span><span class="mm-legend"><i class="lg you"></i>你 <i class="lg ally"></i>友军 <i class="lg enemy"></i>红队</span></div>
+    </div>
+
+    <!-- bottom center: stamina / item / combo -->
+    <div id="hud-stamina">
+      <div class="hud-chip combo-chip" id="combo-panel">
+        <span class="hc-k">COMBO</span>
+        <b id="combo-num">0</b>
+        <i id="combo-mult">x1.0</i>
+      </div>
+      <div class="hud-chip stamina-card">
+        <span class="hc-k">STAMINA</span>
+        <div class="stamina-track"><i id="stamina-fill"></i></div>
+      </div>
+      <div class="hud-chip item-card">
+        <span class="hc-k">RESERVE</span>
+        <span class="item-row"><b id="item-count">×3</b><span class="key">R</span></span>
+      </div>
+    </div>
+
+    <div id="hud-abilities">
+      <div class="ab-chip"><i class="ab-ico ab-fire"></i><span class="ab-k">LMB</span><b>射击</b></div>
+      <div class="ab-chip" id="ab-aim"><i class="ab-ico ab-aim"></i><span class="ab-k">RMB</span><b>瞄准</b></div>
+      <div class="ab-chip"><i class="ab-ico ab-break"></i><span class="ab-k">F</span><b>近战</b></div>
+      <div class="ab-chip"><i class="ab-ico ab-pump"></i><span class="ab-k">R</span><b>换弹</b></div>
+      <div class="ab-chip wet-chip" id="ab-wet">
+        <span class="ab-k">HP</span>
+        <div class="wet-bubble"><i id="ab-wet-fill"></i></div>
+        <b id="ab-wet-val">100</b>
+      </div>
+    </div>
+
+    <div id="hud-bottom-left" class="legacy-hidden">
+      <div class="weapon-panel">
+        <div class="wp-top"><span class="wp-class">主武器</span><span class="wp-name">HYDRA-7</span></div>
+        <div class="wp-tank"><div class="tank-shell"><div class="tank-liquid" id="tank-liquid-legacy"></div></div></div>
+        <div class="wp-status"><span class="dot"></span><span id="weapon-status-legacy">READY</span></div>
+      </div>
+    </div>
+
+    <!-- vitals -->
+    <div id="hud-bottom-right">
+      <div class="vitals tac-card">
+        <div class="vitals-ring">
+          <svg viewBox="0 0 120 120">
+            <circle class="vr-track" cx="60" cy="60" r="52"></circle>
+            <circle class="vr-wet" id="vr-wet" cx="60" cy="60" r="52"></circle>
+            <circle class="vr-hp" id="vr-hp" cx="60" cy="60" r="45"></circle>
+          </svg>
+          <div class="vitals-avatar" id="vitals-avatar">
+            <span class="va-mono">ECHO</span>
+            <span class="va-scan"></span>
+          </div>
+          <span class="hp-badge">HP</span>
+        </div>
+        <div class="vitals-read">
+          <span class="vr-k">VITALS</span>
+          <div class="vr-hp-num" id="hp-value">100</div>
+          <div class="vr-row"><span class="vr-k">SCORE</span><b id="wet-value">0</b></div>
+          <div class="vr-state" id="vitals-state">OPERATIONAL · 作战中</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="crosshair">
+      <div class="ch-dot"></div>
+      <div class="ch-ring"></div>
+      <div class="ch-line ch-t"></div><div class="ch-line ch-b"></div>
+      <div class="ch-line ch-l"></div><div class="ch-line ch-r"></div>
+      <div class="ch-hit" id="ch-hit"></div>
+      <div class="ch-bubble" id="ch-bubble"></div>
+    </div>
+
+    <div id="interact-prompt" class="hidden">
+      <span class="ip-key">F</span><span class="ip-label">MELEE</span><em id="interact-text">近身击倒</em>
+    </div>
+
+    <div id="banner"><span class="banner-sub" id="banner-sub"></span><span class="banner-main" id="banner-main"></span></div>
+
+    <div id="tutorial" class="fade">
+      <div class="tut-step"><kbd>LMB</kbd><span>射击</span></div>
+      <div class="tut-step"><kbd>RMB</kbd><span>瞄准</span></div>
+      <div class="tut-step"><kbd>F</kbd><span>近战</span></div>
+      <div class="tut-step"><kbd>R</kbd><span>换弹</span></div>
+    </div>
+
+    <div id="subtitle"></div>
+    <div id="damage-dirs"></div>
+    <div id="floaters"></div>
+    <div id="hint-toast"></div>
+  </div>
+
+  <!-- ================= LOADING ================= -->
+  <section class="screen screen-loading active" id="screen-loading">
+    <div class="load-bg"></div>
+    <div class="load-grid"></div>
+    <div class="load-frame">
+      <div class="load-top">
+        <div class="brand">
+          <span class="brand-mark">BC</span>
+          <div class="brand-text"><b>BUBBLE CLASH</b><span>TACTICAL FPS · DESERT OPS</span></div>
+        </div>
+        <div class="load-status"><i></i>SECURE CHANNEL</div>
+      </div>
+
+      <div class="load-center">
+        <div class="load-kicker">SYSTEM BOOT / 部署序列 02</div>
+        <h1 class="load-title">OPERATION<br><em>SITE A</em></h1>
+        <div class="load-bar-wrap">
+          <div class="load-bar"><i id="load-bar-fill"></i><span class="load-bar-glow"></span></div>
+          <div class="load-pct"><span id="load-pct">0</span><small>%</small></div>
+        </div>
+        <div class="load-assets" id="load-assets"></div>
+        <p class="load-sub">STREAMING ASSETS · 光照 / 材质 / 角色绑定 / 地形</p>
+      </div>
+
+      <div class="load-bottom">
+        <div class="load-tip-wrap"><span class="lt-tag">INTEL</span><span id="load-tip">红队会从长 A、中门和猫道三路推进。优先卡住长 A。</span></div>
+        <div class="load-scan">PKG <span id="load-count">000</span>/042 <b class="load-ver">v3.0.0</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MENU ================= -->
+  <section class="screen screen-menu" id="screen-menu">
+    <div class="menu-scrim"></div>
+    <div class="menu-grid"></div>
+    <div class="menu-top">
+      <div class="brand">
+        <span class="brand-mark">BC</span>
+        <div class="brand-text"><b>BUBBLE CLASH</b><span>泡泡突围 · 战术射击</span></div>
+      </div>
+      <div class="menu-top-right">
+        <span class="mt-live"><i></i>LIVE OPS</span>
+        <span class="mt-sep"></span>
+        <button class="mini-pill" id="audio-unlock" title="浏览器需要一次交互才能播放音频">AUDIO · 点击开启</button>
+        <button class="mini-pill" id="menu-quality-label" data-action="quality">GFX · ULTRA</button>
+      </div>
+    </div>
+
+    <div class="menu-body">
+      <div class="menu-left">
+        <div class="menu-eyebrow"><span class="me-line"></span>BLUE CELL // DUST SECTOR</div>
+        <h1 class="menu-title">BUBBLE<br><em>CLASH</em></h1>
+        <div class="menu-sub">泡泡突围 · 电影级沙漠战术竞技</div>
+        <p class="menu-desc">沙漠村落，正午高温。红队正从长 A、中门与猫道三路压向 A 点 —— 守住包点中央的泡泡核心，别让他们把它打碎。</p>
+
+        <nav class="menu-sign">
+          <button class="menu-item primary" data-action="start">
+            <span class="mi-idx">01</span>
+            <span class="mi-label"><b>DEPLOY</b><small>开始行动</small></span>
+            <span class="mi-arrow">›</span>
+          </button>
+          <button class="menu-item" data-action="characters">
+            <span class="mi-idx">02</span>
+            <span class="mi-label"><b>OPERATORS</b><small>干员选择</small></span>
+            <span class="mi-arrow">›</span>
+          </button>
+          <button class="menu-item" data-action="settings">
+            <span class="mi-idx">03</span>
+            <span class="mi-label"><b>SETTINGS</b><small>系统设置</small></span>
+            <span class="mi-arrow">›</span>
+          </button>
+          <button class="menu-item" data-action="quit">
+            <span class="mi-idx">04</span>
+            <span class="mi-label"><b>DISCONNECT</b><small>退出</small></span>
+            <span class="mi-arrow">›</span>
+          </button>
+        </nav>
+
+        <div class="menu-meta">
+          <span class="mm-item"><i>MAP</i>DUST SECTOR</span>
+          <span class="mm-item"><i>MODE</i>SITE DEFENSE</span>
+          <span class="mm-item"><i>BUILD</i>3.1.0</span>
+        </div>
+      </div>
+
+      <div class="menu-right">
+        <div class="dossier">
+          <div class="ds-head"><span class="ds-k">ACTIVE OPERATOR</span><span class="ds-rec"><i></i>REC</span></div>
+          <div class="ds-portrait">
+            <span class="ds-mono">ECHO</span>
+            <span class="ds-scan"></span>
+            <span class="ds-corner tl"></span><span class="ds-corner tr"></span>
+            <span class="ds-corner bl"></span><span class="ds-corner br"></span>
+          </div>
+          <div class="ds-name">ECHO <em>// 回声</em></div>
+          <div class="ds-role">ASSAULT · CARBINE</div>
+          <div class="ds-bars">
+            <div class="ds-bar"><span>PWR</span><i style="--v:78%"></i></div>
+            <div class="ds-bar"><span>SPD</span><i style="--v:64%"></i></div>
+            <div class="ds-bar"><span>DEF</span><i style="--v:71%"></i></div>
+          </div>
+          <div class="ds-foot"><span>STATUS</span><b>READY TO DEPLOY</b></div>
+        </div>
+        <div class="menu-copyright">© 2026 BUBBLE CLASH · ALL CHANNELS ENCRYPTED</div>
+      </div>
+    </div>
+
+    <div class="menu-version"><span class="mv-dot"></span>BUILD 3.1.0 · SITE A</div>
+
+    <div class="controls-modal" id="controls-modal">
+      <div class="cm-head"><b>作战手册</b><span>FIELD MANUAL</span><button data-action="close-controls">✕</button></div>
+      <div class="cm-grid">
+        <div class="cm-cell"><kbd>WASD</kbd><b>移动 / 疾跑</b><p>相对镜头方向移动，Shift 疾跑，Space 跳跃。</p></div>
+        <div class="cm-cell"><kbd>LMB</kbd><b>射击</b><p>按住左键持续开火，弹道从枪口朝准星落点汇聚，命中即扣血。</p></div>
+        <div class="cm-cell"><kbd>F</kbd><b>近身格斗</b><p>贴近红队按 F 挥拳，一击将其击倒。</p></div>
+        <div class="cm-cell"><kbd>R</kbd><b>换弹</b><p>弹匣打空后按 R 换弹，备用弹匣有限。</p></div>
+      </div>
+      <div class="cm-foot">A 点周围刷新 DMR 与 SMG，拾取后获得 30 秒火力优势。</div>
+    </div>
+  </section>
+
+  <!-- ================= CHARACTER SELECT ================= -->
+  <section class="overlay-screen" id="screen-characters">
+    <div class="overlay-scrim"></div>
+    <div class="cs-wrap">
+      <div class="cs-head">
+        <div>
+          <span class="cs-kicker">OPERATOR SELECT</span>
+          <h2>选择特战干员</h2>
+        </div>
+        <button class="ov-close" data-action="close-characters">✕</button>
+      </div>
+      <div class="cs-body">
+        <div class="cs-preview">
+          <div class="cs-bigface" id="cs-bigface">
+            <canvas id="cs-preview"></canvas>
+            <span class="cs-scan"></span>
+            <span class="cs-mono">ECHO</span>
+            <span class="cs-corner tl"></span><span class="cs-corner tr"></span>
+            <span class="cs-corner bl"></span><span class="cs-corner br"></span>
+          </div>
+          <div class="cs-name" id="cs-name">ECHO</div>
+          <div class="cs-role" id="cs-role">ASSAULT · CARBINE</div>
+          <div class="cs-stats">
+            <div class="cs-stat"><span>POWER</span><div class="seg" id="cs-power"><i></i><i></i><i></i><i></i></div></div>
+            <div class="cs-stat"><span>SPEED</span><div class="seg" id="cs-speed"><i></i><i></i><i></i><i></i></div></div>
+            <div class="cs-stat"><span>DEFENSE</span><div class="seg" id="cs-defense"><i></i><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="cs-list" id="cs-list"></div>
+        <aside class="cs-dossier" id="cs-dossier">
+          <div class="cd-top">
+            <span class="cd-kicker">OPERATOR DOSSIER</span>
+            <span class="cd-file" id="cd-file">FILE 01</span>
+          </div>
+          <div class="cd-title">
+            <h3 id="cd-name">ECHO</h3>
+            <span id="cd-cn">回声</span>
+          </div>
+          <div class="cd-role" id="cd-role">ASSAULT · 突击手</div>
+          <p class="cd-bio" id="cd-bio">回声小组的突击核心，习惯在中门与猫道之间快速换位，用稳定火力替队友打开通道。</p>
+          <div class="cd-rows">
+            <div class="cd-row"><span>PRIMARY</span><b id="cd-weapon">M4A1 CARBINE</b><small id="cd-weapon-sub">30 / 90 · 5.56 毫米</small></div>
+            <div class="cd-row"><span>MELEE</span><b>TACTICAL FIST</b><small>F · 近身击倒</small></div>
+            <div class="cd-row"><span>SPECIALTY</span><b id="cd-trait">稳定压制</b><small id="cd-trait-desc">移动射击散布更低，适合边推边打。</small></div>
+          </div>
+          <div class="cd-notes">
+            <span class="cd-label">FIELD NOTES</span>
+            <ul id="cd-notes">
+              <li>长 A 卡点优先，别在开阔地久留。</li>
+              <li>弹匣 30 发，打空按 R 换弹。</li>
+              <li>靠近敌人按 F 挥拳可直接击倒。</li>
+            </ul>
+          </div>
+          <div class="cd-bars">
+            <div class="cd-bar"><span>FIREPOWER</span><i><em id="cd-bar-pow" style="width:75%"></em></i><b id="cd-pow">03</b></div>
+            <div class="cd-bar"><span>MOBILITY</span><i><em id="cd-bar-spd" style="width:75%"></em></i><b id="cd-spd">03</b></div>
+            <div class="cd-bar"><span>ARMOR</span><i><em id="cd-bar-def" style="width:75%"></em></i><b id="cd-def">03</b></div>
+          </div>
+          <div class="cd-foot"><span class="cd-dot"></span>STATUS · READY FOR DEPLOYMENT</div>
+        </aside>
+      </div>
+      <div class="cs-actions">
+        <button class="tac-btn primary" data-action="confirm-characters">CONFIRM <small>确认</small></button>
+        <button class="tac-btn" data-action="close-characters">BACK <small>返回</small></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SETTINGS ================= -->
+  <section class="overlay-screen" id="screen-settings">
+    <div class="overlay-scrim"></div>
+    <div class="set-wrap">
+      <div class="set-head">
+        <div><span class="cs-kicker">SYSTEM</span><h2>设置</h2></div>
+        <button class="ov-close" data-action="close-settings">✕</button>
+      </div>
+      <div class="set-cols">
+        <div class="set-col">
+          <div class="set-col-title">AUDIO · 音频</div>
+          <label class="set-row"><img src="assets/ui/icon-volume.webp" alt=""><span>MASTER<br>VOLUME</span><input type="range" id="set-volume" min="0" max="100" value="70"><b id="set-volume-val">70%</b></label>
+          <label class="set-row"><img src="assets/ui/icon-music.webp" alt=""><span>MUSIC</span><input type="range" id="set-music" min="0" max="100" value="60"><b id="set-music-val">60%</b></label>
+          <label class="set-row"><img src="assets/ui/icon-sfx.webp" alt=""><span>SFX</span><input type="range" id="set-sfx" min="0" max="100" value="85"><b id="set-sfx-val">85%</b></label>
+          <label class="set-row"><img src="assets/ui/icon-voice.webp" alt=""><span>VOICE</span><input type="range" id="set-voice" min="0" max="100" value="50"><b id="set-voice-val">50%</b></label>
+        </div>
+        <div class="set-col">
+          <div class="set-col-title">SYSTEM · 系统</div>
+          <div class="set-row"><img src="assets/ui/icon-graphics.webp" alt=""><span>GRAPHICS</span>
+            <div class="seg-pills" data-setting="quality">
+              <button data-q="high">HIGH</button><button data-q="ultra" class="on">ULTRA</button>
+            </div>
+          </div>
+          <label class="set-row"><img src="assets/ui/icon-mouse.webp" alt=""><span>MOUSE<br>SENSITIVITY</span><input type="range" id="set-sens" min="20" max="200" value="100"><b id="set-sens-val">1.00</b></label>
+          <div class="set-row"><img src="assets/ui/icon-invert.webp" alt=""><span>INVERT Y</span>
+            <button class="toggle" id="set-invert" data-on="0"><i></i></button>
+          </div>
+          <div class="set-row"><img src="assets/ui/icon-language.webp" alt=""><span>LANGUAGE</span>
+            <div class="lang-pill">EN / 中文</div>
+          </div>
+          <div class="set-row"><img src="assets/ui/icon-fullscreen.webp" alt=""><span>FULLSCREEN</span>
+            <button class="toggle on" id="set-fullscreen"><i></i></button>
+          </div>
+        </div>
+      </div>
+      <div class="set-actions">
+        <button class="tac-btn primary" data-action="apply-settings">APPLY <small>应用</small></button>
+        <button class="tac-btn" data-action="close-settings">BACK <small>返回</small></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PAUSE ================= -->
+  <section class="screen screen-pause" id="screen-pause">
+    <div class="pause-backdrop"></div>
+    <div class="pause-panel tac-panel">
+      <div class="pause-head"><span class="cs-kicker">SIMULATION HALTED</span><h2>PAUSED<em>// 暂停</em></h2></div>
+      <div class="pp-main">
+        <button class="menu-item primary" data-action="resume"><span class="mi-idx">01</span><span class="mi-label"><b>RESUME</b><small>继续行动</small></span><span class="mi-arrow">›</span></button>
+        <button class="menu-item" data-action="restart"><span class="mi-idx">02</span><span class="mi-label"><b>RESTART</b><small>重新部署</small></span><span class="mi-arrow">›</span></button>
+        <button class="menu-item" data-action="settings"><span class="mi-idx">03</span><span class="mi-label"><b>SETTINGS</b><small>系统设置</small></span><span class="mi-arrow">›</span></button>
+        <button class="menu-item" data-action="menu"><span class="mi-idx">04</span><span class="mi-label"><b>MAIN MENU</b><small>返回主菜单</small></span><span class="mi-arrow">›</span></button>
+      </div>
+      <div class="pp-stats">
+        <div><b id="pause-score">0</b><span>SCORE</span></div>
+        <div><b id="pause-elim">0</b><span>KILLS</span></div>
+        <div><b id="pause-rescue">0</b><span>MELEE</span></div>
+      </div>
+      <div class="pp-settings legacy-hidden">
+        <div class="ps-row"><label>鼠标灵敏度</label><input type="range" id="sens-slider" min="20" max="200" value="100"><span id="sens-val">1.00</span></div>
+        <div class="ps-row"><label>画质预设</label>
+          <div class="ps-seg" data-setting="quality">
+            <button data-q="high">高</button><button data-q="ultra" class="on">极致</button>
+          </div>
+        </div>
+        <div class="ps-row"><label>音量</label><input type="range" id="vol-slider" min="0" max="100" value="65"><span id="vol-val">65</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RESULTS ================= -->
+  <section class="screen screen-results" id="screen-results">
+    <div class="res-backdrop"></div>
+    <div class="res-wrap">
+      <div class="res-head">
+        <div class="res-kicker" id="res-kicker">MISSION COMPLETE · A 点守住了</div>
+        <h1 id="res-title" class="victory">VICTORY</h1>
+        <div class="res-stars" id="res-stars"><span>★</span><span>★</span><span>★</span></div>
+      </div>
+      <div class="res-score-capsule">
+        <span class="team-blue-label">BLUE CELL</span>
+        <b id="res-score">0 : 0</b>
+        <span class="team-red-label">RED CELL</span>
+      </div>
+      <div class="res-stats">
+        <div class="res-stat-row"><span class="rs-k">KILLS</span><b id="rs-p-pop">0</b></div>
+        <div class="res-stat-row"><span class="rs-k">MELEE</span><b id="rs-p-rescue">0</b></div>
+        <div class="res-stat-row"><span class="rs-k">ACCURACY</span><b id="rs-p-acc">0%</b></div>
+        <div class="res-stat-row"><span class="rs-k">BEST STREAK</span><b id="res-combo">0</b></div>
+      </div>
+      <div class="res-sub" id="res-sub">蓝队完成清剿 · 泡泡核心完好</div>
+      <div class="res-actions">
+        <button class="tac-btn primary" data-action="restart">REDEPLOY <small>再来一局</small></button>
+        <button class="tac-btn" data-action="menu">MAIN MENU <small>主菜单</small></button>
+      </div>
+
+      <div class="res-scoreboard legacy-hidden">
+        <div class="rs-row rs-head"><span>队员</span><span>得分</span><span>击杀</span><span>击倒</span><span>助攻</span><span>命中</span></div>
+        <div class="rs-row me" id="rs-player"><span class="rs-name"><i class="rs-dot blue"></i>ECHO</span><span id="rs-p-score">0</span><span id="rs-p-bubble">0</span><span>0</span><span>0</span><span>0%</span></div>
+        <div class="rs-row ally" id="rs-ally"><span class="rs-name"><i class="rs-dot green"></i>NOVA</span><span id="rs-a-score">0</span><span id="rs-a-bubble">0</span><span id="rs-a-pop">0</span><span id="rs-a-rescue">0</span><span id="rs-a-acc">0%</span></div>
+        <div class="rs-row enemy"><span class="rs-name"><i class="rs-dot red"></i>RED CELL</span><span id="rs-e-score">0</span><span id="rs-e-bubble">0</span><span id="rs-e-pop">0</span><span id="rs-e-rescue">0</span><span>—</span></div>
+      </div>
+      <div class="res-body legacy-hidden">
+        <div class="res-mvp">
+          <div class="mvp-tag">MVP</div>
+          <div class="mvp-avatar" id="mvp-avatar"></div>
+          <div class="mvp-name" id="mvp-name">ECHO</div>
+          <div class="mvp-line">最高连击 <b id="mvp-combo">0</b> · 击杀 <b id="mvp-bubble">0</b></div>
+        </div>
+        <div class="res-detail">
+          <div class="rd-item"><span class="rd-k">作战时长</span><b id="res-duration">03:00</b></div>
+          <div class="rd-item"><span class="rd-k">命中率</span><b id="res-acc">0%</b></div>
+          <div class="rd-item"><span class="rd-k">承受伤害</span><b id="res-taken">0</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="countdown"><span id="countdown-num">3</span><em id="countdown-sub">准备</em></div>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

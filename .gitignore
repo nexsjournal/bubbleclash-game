@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist.zip
+.screenshots/
+.trae-html-share-packages/
+referimg/
+.DS_Store
+*.log
